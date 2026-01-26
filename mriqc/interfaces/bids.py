@@ -24,6 +24,7 @@ import re
 from pathlib import Path
 
 import orjson as json
+import pandas as pd
 from nipype.interfaces.base import (
     BaseInterfaceInputSpec,
     DynamicTraitedSpec,
@@ -36,7 +37,7 @@ from nipype.interfaces.base import (
     traits,
 )
 
-from mriqc import config
+from mriqc import __version__, config
 from mriqc.utils.misc import BIDS_COMP
 
 
@@ -75,6 +76,8 @@ class IQMFileSinkInputSpec(DynamicTraitedSpec, BaseInterfaceInputSpec):
 
 class IQMFileSinkOutputSpec(TraitedSpec):
     out_file = File(desc='the output JSON file containing the IQMs')
+    out_parquet = File(desc='the output parquet file containing the IQMs')
+    out_sidecar = File(desc='the output sidecar JSON file containing schema metadata')
 
 
 class IQMFileSink(SimpleInterface):
@@ -130,8 +133,22 @@ class IQMFileSink(SimpleInterface):
         self._results['out_file'] = str(bids_path)
         return self._results['out_file']
 
+    def _gen_parquet_paths(self, out_file):
+        base_path = Path(out_file).with_suffix('')
+        parquet_path = base_path.with_name(f'{base_path.name}+iqms.parquet')
+        sidecar_path = base_path.with_name(f'{base_path.name}+iqms.json')
+        self._results['out_parquet'] = str(parquet_path)
+        self._results['out_sidecar'] = str(sidecar_path)
+        return parquet_path, sidecar_path
+
+    def _build_dataframe(self):
+        dataframe = pd.json_normalize(self._out_dict, sep='.')
+        dataframe = dataframe.reindex(sorted(dataframe.columns), axis=1)
+        return dataframe
+
     def _run_interface(self, runtime):
         out_file = self._gen_outfile()
+        parquet_path, sidecar_path = self._gen_parquet_paths(out_file)
 
         if isdefined(self.inputs.root):
             self._out_dict = self.inputs.root
@@ -190,6 +207,30 @@ class IQMFileSink(SimpleInterface):
         Path(out_file).write_bytes(
             json.dumps(
                 self._out_dict,
+                option=(
+                    json.OPT_SORT_KEYS
+                    | json.OPT_INDENT_2
+                    | json.OPT_APPEND_NEWLINE
+                    | json.OPT_SERIALIZE_NUMPY
+                ),
+            )
+        )
+
+        dataframe = self._build_dataframe()
+        dataframe.to_parquet(parquet_path, index=False)
+
+        sidecar_payload = {
+            'mriqc_version': __version__,
+            'modality': self.inputs.modality,
+            'bids_entities': self._out_dict.get('bids_meta', {}),
+            'columns': [
+                {'name': name, 'dtype': str(dtype)} for name, dtype in dataframe.dtypes.items()
+            ],
+        }
+
+        Path(sidecar_path).write_bytes(
+            json.dumps(
+                sidecar_payload,
                 option=(
                     json.OPT_SORT_KEYS
                     | json.OPT_INDENT_2
