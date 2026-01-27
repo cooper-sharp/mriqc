@@ -233,12 +233,22 @@ def upload_qc_metrics(
 
     in_data = orjson.loads(Path(in_iqms).read_bytes())
 
-    # Extract metadata and provenance
-    meta = in_data.pop('bids_meta')
-    prov = in_data.pop('provenance')
+    if 'bids_meta' in in_data:
+        meta = in_data.pop('bids_meta')
+        prov = in_data.pop('provenance', {})
+        data = deepcopy(in_data)
+    else:
+        meta = in_data
+        prov = {}
+        data = {}
 
-    # At this point, data should contain only IQMs
-    data = deepcopy(in_data)
+    parquet_path = Path(in_iqms).with_suffix('').with_name(f'{Path(in_iqms).stem}+iqms.parquet')
+    if parquet_path.exists():
+        import pandas as pd
+
+        dataframe = pd.read_parquet(parquet_path)
+        if not dataframe.empty:
+            data = dataframe.iloc[0].to_dict()
 
     # Check modality
     modality = meta.get('modality', None) or meta.get('suffix', None) or modality
