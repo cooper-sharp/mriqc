@@ -7,8 +7,8 @@ jobs:
     environment:
       - TZ: "/usr/share/zoneinfo/America/Los_Angeles"
       - MRIQC_API_TAG: 1.1.0
-      - MRIQC_API_DOCKER_IMAGES: "nginx:latest swaggerapi/swagger-ui:latest mongo:latest
-          python:3.7-slim"
+      - MRIQC_API_DOCKER_IMAGES: "nginx:1.26.2 swaggerapi/swagger-ui:v5.17.14 mongo:6.0.15
+          python:3.7-slim-bullseye"
       - DOCKER_BUILDKIT: 1
     machine:
       # https://discuss.circleci.com/t/linux-machine-executor-images-2021-april-q2-update/39928
@@ -118,6 +118,11 @@ jobs:
               sed -i -E "s/<secret_token>/$MRIQC_API_SECRET_TOKEN/" dockereve-master/.env
               grep -q -i $MRIQC_API_SECRET_TOKEN dockereve-master/.env
             fi
+            sed -i -E \
+              -e 's#image: nginx:latest#image: nginx:1.26.2#' \
+              -e 's#image: swaggerapi/swagger-ui:latest#image: swaggerapi/swagger-ui:v5.17.14#' \
+              -e 's#image: mongo:latest#image: mongo:6.0.15#' \
+              dockereve-master/docker-compose.yml
             docker-compose -f /tmp/src/mriqcwebapi/dockereve-master/docker-compose.yml pull
             docker-compose -f /tmp/src/mriqcwebapi/dockereve-master/docker-compose.yml build
 
@@ -317,8 +322,8 @@ jobs:
     environment:
       - TZ: "/usr/share/zoneinfo/America/Los_Angeles"
       - TEST_DATA_NAME: "circle-tests"
-      - MRIQC_API_DOCKER_IMAGES: "nginx:latest swaggerapi/swagger-ui:latest mongo:latest
-          python:3.7-slim dockereve-master-endpoints:latest"
+      - MRIQC_API_DOCKER_IMAGES: "nginx:1.26.2 swaggerapi/swagger-ui:v5.17.14 mongo:6.0.15
+          python:3.7-slim-bullseye dockereve-master-endpoints:latest"
       - MIGAS_OPTOUT: "1"
     machine:
       # https://discuss.circleci.com/t/linux-machine-executor-images-2021-april-q2-update/39928
@@ -481,8 +486,8 @@ jobs:
     environment:
       - TZ: "/usr/share/zoneinfo/America/Los_Angeles"
       - TEST_DATA_NAME: "circle-tests"
-      - MRIQC_API_DOCKER_IMAGES: "nginx:latest swaggerapi/swagger-ui:latest mongo:latest
-          python:3.7-slim dockereve-master-endpoints:latest"
+      - MRIQC_API_DOCKER_IMAGES: "nginx:1.26.2 swaggerapi/swagger-ui:v5.17.14 mongo:6.0.15
+          python:3.7-slim-bullseye dockereve-master-endpoints:latest"
       - MIGAS_OPTOUT: "1"
     machine:
       # https://discuss.circleci.com/t/linux-machine-executor-images-2021-april-q2-update/39928
