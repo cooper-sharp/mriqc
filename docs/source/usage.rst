@@ -118,13 +118,16 @@ following layout::
 
   <derivs-folder>/sub-<label>/[ses-<label>/]<anat|func|dwi>/<bids-selectors>_<suffix>+iqms.parquet
 
-Each parquet file contains a single row with IQM values, flattened provenance fields,
-and BIDS metadata. A sidecar JSON is written alongside it to document the schema::
+Each parquet file contains a single row with IQM values (no metadata). A sidecar JSON is
+written alongside it to document the schema::
 
   <derivs-folder>/sub-<label>/[ses-<label>/]<anat|func|dwi>/<bids-selectors>_<suffix>+iqms.json
 
 The sidecar includes the column names and types, the MRIQC version used to generate
 the file, the modality, and the BIDS entities identifying the input.
+
+The traditional ``<bids-selectors>_<suffix>.json`` file now contains only metadata
+fields (formerly under ``bids_meta``) at the root level and no IQM values.
 
 Schema compatibility policy
 ...........................

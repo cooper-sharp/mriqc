@@ -141,8 +141,8 @@ class IQMFileSink(SimpleInterface):
         self._results['out_sidecar'] = str(sidecar_path)
         return parquet_path, sidecar_path
 
-    def _build_dataframe(self):
-        dataframe = pd.json_normalize(self._out_dict, sep='.')
+    def _build_dataframe(self, iqm_payload):
+        dataframe = pd.json_normalize(iqm_payload, sep='.')
         dataframe = dataframe.reindex(sorted(dataframe.columns), axis=1)
         return dataframe
 
@@ -204,9 +204,40 @@ class IQMFileSink(SimpleInterface):
             self._out_dict['provenance'] = {}
         self._out_dict['provenance'].update(prov_dict)
 
+        metadata_payload = self._out_dict.get('bids_meta', {})
+        iqm_payload = {
+            key: value
+            for key, value in self._out_dict.items()
+            if key not in ('bids_meta', 'provenance')
+        }
+
         Path(out_file).write_bytes(
             json.dumps(
-                self._out_dict,
+                metadata_payload,
+                option=(
+                    json.OPT_SORT_KEYS
+                    | json.OPT_INDENT_2
+                    | json.OPT_APPEND_NEWLINE
+                    | json.OPT_SERIALIZE_NUMPY
+                ),
+            )
+        )
+
+        dataframe = self._build_dataframe(iqm_payload)
+        dataframe.to_parquet(parquet_path, index=False)
+
+        sidecar_payload = {
+            'mriqc_version': __version__,
+            'modality': self.inputs.modality,
+            'bids_entities': metadata_payload,
+            'columns': [
+                {'name': name, 'dtype': str(dtype)} for name, dtype in dataframe.dtypes.items()
+            ],
+        }
+
+        Path(sidecar_path).write_bytes(
+            json.dumps(
+                sidecar_payload,
                 option=(
                     json.OPT_SORT_KEYS
                     | json.OPT_INDENT_2
