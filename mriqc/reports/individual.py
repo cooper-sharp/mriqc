@@ -25,6 +25,7 @@
 from json import loads
 from pathlib import Path
 
+import pandas as pd
 from nireports.assembler.report import Report
 from niworkflows.data import Loader
 
@@ -56,14 +57,14 @@ def _single_report(in_file):
     entities.pop('part', None)
     report_type = entities.pop('datatype', None)
 
-    # Read output file:
-    mriqc_json = loads(
-        (
-            Path(config.execution.output_dir)
-            / in_file.parent.relative_to(config.execution.bids_dir)
-            / in_file.name.replace(''.join(in_file.suffixes), '.json')
-        ).read_text()
+    json_path = (
+        Path(config.execution.output_dir)
+        / in_file.parent.relative_to(config.execution.bids_dir)
+        / in_file.name.replace(''.join(in_file.suffixes), '+iqms.json')
     )
+
+    # Read output file:
+    mriqc_json = loads(json_path.read_text())
     mriqc_json.pop('bids_meta')
 
     # Clean-up provenance dictionary
@@ -82,6 +83,13 @@ def _single_report(in_file):
     bids_meta = config.execution.layout.get_file(in_file).get_metadata()
     bids_meta.pop('global', None)
 
+    # Open IQMs (parquet)
+    dataframe = pd.read_parquet(json_path.with_suffix('.parquet'))
+    if dataframe.empty:
+        raise ValueError(f'<{json_path.with_suffix(".parquet")}> is an empty dataframe.')
+
+    iqms_dict = dataframe.iloc[0].to_dict()
+
     robj = Report(
         config.execution.output_dir,
         config.execution.run_uuid,
@@ -92,7 +100,7 @@ def _single_report(in_file):
             'about-metadata': {
                 'Provenance Information': prov,
                 'Dataset Information': bids_meta,
-                'Extracted Image quality metrics (IQMs)': mriqc_json,
+                'Extracted Image quality metrics (IQMs)': iqms_dict,
             },
         },
         plugin_meta={

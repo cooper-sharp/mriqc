@@ -114,7 +114,7 @@ HASH_BIDS = ['subject_id', 'session_id']
 
 
 class UploadIQMsInputSpec(BaseInterfaceInputSpec):
-    in_iqms = File(exists=True, mandatory=True, desc='the input IQMs-JSON file')
+    in_iqms = File(exists=True, mandatory=True, desc='the input IQMs (a parquet file)')
     endpoint = Str(mandatory=True, desc='URL of the POST endpoint')
     auth_token = Str(mandatory=True, desc='authentication token')
     email = Str(desc='set sender email')
@@ -222,8 +222,8 @@ def upload_qc_metrics(
 
 
     """
-    from copy import deepcopy
 
+    import pandas as pd
     import requests
 
     if not endpoint or not auth_token:
@@ -231,24 +231,16 @@ def upload_qc_metrics(
         errmsg = 'Unknown API endpoint' if not endpoint else 'Authentication failed.'
         return Bunch(status_code=1, text=errmsg)
 
-    in_data = orjson.loads(Path(in_iqms).read_bytes())
+    # Open IQMs (parquet)
+    dataframe = pd.read_parquet(in_iqms)
+    if dataframe.empty:
+        raise ValueError(f'<{in_iqms}> is an empty dataframe.')
 
-    if 'bids_meta' in in_data:
-        meta = in_data.pop('bids_meta')
-        prov = in_data.pop('provenance', {})
-        data = deepcopy(in_data)
-    else:
-        meta = in_data
-        prov = {}
-        data = {}
+    data = dataframe.iloc[0].to_dict()
 
-    parquet_path = Path(in_iqms).with_suffix('').with_name(f'{Path(in_iqms).stem}+iqms.parquet')
-    if parquet_path.exists():
-        import pandas as pd
-
-        dataframe = pd.read_parquet(parquet_path)
-        if not dataframe.empty:
-            data = dataframe.iloc[0].to_dict()
+    # Open metadata (json)
+    in_data = orjson.loads(Path(in_iqms).with_suffix('.json').read_bytes())
+    meta = in_data['bids_meta']
 
     # Check modality
     modality = meta.get('modality', None) or meta.get('suffix', None) or modality
@@ -275,6 +267,7 @@ def upload_qc_metrics(
         data['bids_meta']['acq_id'] = acq_id
 
     # Filter provenance values that aren't in whitelist
+    prov = in_data['provenance']
     data['provenance'] = {k: prov[k] for k in PROV_WHITELIST if k in prov}
 
     # Hash fields that may contain personal information
