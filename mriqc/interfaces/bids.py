@@ -247,29 +247,6 @@ class IQMFileSink(SimpleInterface):
             )
         )
 
-        dataframe = self._build_dataframe()
-        dataframe.to_parquet(parquet_path, index=False)
-
-        sidecar_payload = {
-            'mriqc_version': __version__,
-            'modality': self.inputs.modality,
-            'bids_entities': self._out_dict.get('bids_meta', {}),
-            'columns': [
-                {'name': name, 'dtype': str(dtype)} for name, dtype in dataframe.dtypes.items()
-            ],
-        }
-
-        Path(sidecar_path).write_bytes(
-            json.dumps(
-                sidecar_payload,
-                option=(
-                    json.OPT_SORT_KEYS
-                    | json.OPT_INDENT_2
-                    | json.OPT_APPEND_NEWLINE
-                    | json.OPT_SERIALIZE_NUMPY
-                ),
-            )
-        )
         return runtime
 
 
