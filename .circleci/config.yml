@@ -6,7 +6,7 @@ jobs:
   build:
     environment:
       - TZ: "/usr/share/zoneinfo/America/Los_Angeles"
-      - MRIQC_API_TAG: 1.1.0
+      - MRIQC_API_TAG: 1.1.1
       - MRIQC_API_DOCKER_IMAGES: "nginx:latest swaggerapi/swagger-ui:latest mongo:latest
           python:3.7-slim"
       - DOCKER_BUILDKIT: 1
