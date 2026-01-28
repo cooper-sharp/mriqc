@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from collections import OrderedDict
 from collections.abc import Iterable
 from functools import partial
@@ -204,37 +205,13 @@ def generate_tsv(output_dir, mod):
 
     datalist = []
     for parquet_file in parquet_files:
-        try:
-            parquet_df = pd.read_parquet(parquet_file)
-        except Exception as err:
-            logger.warning(
-                'Skipping parquet IQM file %s due to error: %s',
-                parquet_file,
-                err,
-            )
-            continue
-
-        sidecar = parquet_file.with_suffix('.json')
-        if not sidecar.exists():
-            logger.warning('Missing sidecar JSON for %s', parquet_file)
-            continue
-
-        try:
-            sidecar_data = json.loads(sidecar.read_text())
-        except Exception as err:
-            logger.warning(
-                'Skipping sidecar JSON %s due to error: %s',
-                sidecar,
-                err,
-            )
-            continue
+        parquet_df = pd.read_parquet(parquet_file)
+        if parquet_df.empty:
+            logger.warning('Parquet IQM file <%s> is empty', parquet_file)
 
         records = parquet_df.to_dict(orient='records')
         for record in records:
-            bids_name = parquet_file.stem
-            if bids_name.endswith('+iqms'):
-                bids_name = bids_name[: -len('+iqms')]
-            record['bids_name'] = bids_name
+            record['bids_name'] = re.sub(r'\+iqms$', '', parquet_file.stem)
             datalist.append(record)
 
     if not datalist:
