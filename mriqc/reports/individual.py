@@ -65,7 +65,7 @@ def _single_report(in_file):
 
     # Read output file:
     mriqc_json = loads(json_path.read_text())
-    mriqc_json.pop('bids_meta')
+    json_bids_meta = mriqc_json.pop('bids_meta', None)
 
     # Clean-up provenance dictionary
     prov = mriqc_json.pop('provenance', None)
@@ -81,7 +81,11 @@ def _single_report(in_file):
     prov['Versions_TemplateFlow'] = config.environment.templateflow_version
 
     bids_meta = config.execution.layout.get_file(in_file).get_metadata()
-    bids_meta.pop('global', None)
+    if bids_meta:
+        bids_meta.pop('global', None)
+    elif json_bids_meta:
+        bids_meta = json_bids_meta
+    bids_meta = bids_meta or {}
 
     # Open IQMs (parquet)
     dataframe = pd.read_parquet(json_path.with_suffix('.parquet'))
