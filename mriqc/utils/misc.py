@@ -229,12 +229,8 @@ def generate_tsv(output_dir, mod):
             )
             continue
 
-        bids_meta = sidecar_data.get('bids_meta') or {}
-        flat_bids_meta = _flatten(bids_meta)
-        flat_bids_meta = {key: _stringify_bids_value(val) for key, val in flat_bids_meta.items()}
         records = parquet_df.to_dict(orient='records')
         for record in records:
-            record.update(flat_bids_meta)
             bids_name = parquet_file.stem
             if bids_name.endswith('+iqms'):
                 bids_name = bids_name[: -len('+iqms')]
@@ -274,14 +270,6 @@ def _flatten(in_dict, parent_key='', sep='_'):
         else:
             items.append((new_key, val))
     return dict(items)
-
-
-def _stringify_bids_value(value):
-    if value is None:
-        return None
-    if isinstance(value, (list, tuple)):
-        return json.dumps(value)
-    return str(value)
 
 
 def _flatten_dict(indict):
