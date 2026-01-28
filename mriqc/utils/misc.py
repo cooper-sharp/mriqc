@@ -200,7 +200,7 @@ def generate_tsv(output_dir, mod):
     out_tsv = output_dir / (f'group_{mod}.tsv')
     parquet_files = list(output_dir.glob(f'sub-*/**/{IMTYPES[mod]}/*_{mod}+iqms.parquet'))
     if not parquet_files:
-        raise FileNotFoundError(f'No parquet IQM files found for modality {mod}')
+        return None, out_tsv
 
     datalist = []
     for parquet_file in parquet_files:
@@ -241,9 +241,11 @@ def generate_tsv(output_dir, mod):
             datalist.append(record)
 
     if not datalist:
-        raise RuntimeError(
-            f'No valid parquet IQM data found for modality {mod}; check logs for skipped files.'
+        logger.warning(
+            'No valid parquet IQM data found for modality %s; check logs for skipped files.',
+            mod,
         )
+        return None, out_tsv
 
     dataframe = pd.DataFrame(datalist)
     cols = dataframe.columns.tolist()  # pylint: disable=no-member
