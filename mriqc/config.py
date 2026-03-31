@@ -514,7 +514,7 @@ class execution(_Config):
                     r'(beh|fmap|pet|perf|meg|eeg|ieeg|micr|nirs)'
                 ),
                 # Ignore all files, except for the supported modalities
-                re.compile(r'^.+(?<!(_T1w|_T2w|_FLAIR|bold|_dwi))\.(json|nii|nii\.gz)$'),
+                re.compile(r'^.+(?<!_T1w)(?<!_T2w)(?<!_FLAIR)(?<!bold)(?<!_dwi)\.(json|nii|nii\.gz)$'),
             ]
 
             if cls.participant_label:
