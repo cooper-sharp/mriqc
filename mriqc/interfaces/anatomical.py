@@ -37,6 +37,7 @@ from nipype.interfaces.base import (
 )
 from nipype.utils.filemanip import fname_presuffix
 
+from mriqc import config
 from mriqc.qc.anatomical import (
     art_qi1,
     art_qi2,
@@ -113,9 +114,9 @@ class StructuralQC(SimpleInterface):
         inudata[inudata < 0] = 0
 
         if np.all(inudata < 1e-5):
-            raise RuntimeError(
-                'Input inhomogeneity-corrected data seem empty. '
-                'MRIQC failed to process this dataset.'
+            config.loggers.workflow.warning(
+                'Input inhomogeneity-corrected data seem empty — '
+                'this may be expected for FLAIR images.'
             )
 
         # Load binary segmentation from FSL FAST
@@ -204,7 +205,6 @@ class StructuralQC(SimpleInterface):
 
         # CJV
         self._results['cjv'] = cjv(
-            # mu_wm, mu_gm, sigma_wm, sigma_gm
             stats['wm']['median'],
             stats['gm']['median'],
             stats['wm']['mad'],
@@ -417,9 +417,7 @@ class Harmonize(SimpleInterface):
             wm_mask[data < np.percentile(data[brain_mask], 75)] = False
             wm_mask[data > np.percentile(data[brain_mask], 95)] = False
         elif self.inputs.erodemsk:
-            # Create a structural element to be used in an opening operation.
             struct = nd.generate_binary_structure(3, 2)
-            # Perform an opening operation on the background data.
             wm_mask = nd.binary_erosion(wm_mask.astype(np.uint8), structure=struct).astype(bool)
 
         data *= 1000.0 / np.median(data[wm_mask])
