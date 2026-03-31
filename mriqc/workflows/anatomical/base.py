@@ -826,8 +826,10 @@ def _get_mod(in_file):
 
 
 def _get_mod_for_norm(in_file):
-    """Map FLAIR to T2w for ANTs normalization reference selection."""
-    mod = _get_mod(in_file)
+    from pathlib import Path
+    in_file = Path(in_file)
+    extension = ''.join(in_file.suffixes)
+    mod = in_file.name.replace(extension, '').split('_')[-1]
     return 'T2w' if mod == 'FLAIR' else mod
 
 
