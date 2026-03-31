@@ -22,6 +22,7 @@
 #
 """Nipype interfaces to support anatomical workflow."""
 
+import os
 from pathlib import Path
 
 import nibabel as nb
@@ -106,8 +107,6 @@ class StructuralQC(SimpleInterface):
     output_spec = StructuralQCOutputSpec
 
     def _run_interface(self, runtime):  # pylint: disable=R0914,E1101
-        import os
-
         imnii = nb.load(self.inputs.in_noinu)
 
         # Load image corrected for INU
@@ -117,7 +116,23 @@ class StructuralQC(SimpleInterface):
         if np.all(inudata < 1e-5):
             if os.getenv('MRIQC_ALLOW_EMPTY_N4', '0') == '1':
                 print('WARNING: N4 produced empty output — continuing (FLAIR workaround)')
-                self._results['out_file'] = self.inputs.in_noinu
+                self._results['out_qc'] = {}
+                self._results['summary'] = {}
+                self._results['icvs'] = {}
+                self._results['rpve'] = {}
+                self._results['size'] = {}
+                self._results['spacing'] = {}
+                self._results['fwhm'] = {}
+                self._results['inu'] = {}
+                self._results['snr'] = {}
+                self._results['snrd'] = {}
+                self._results['tpm_overlap'] = {}
+                self._results['cnr'] = 0.0
+                self._results['fber'] = 0.0
+                self._results['efc'] = 0.0
+                self._results['qi_1'] = 0.0
+                self._results['wm2max'] = 0.0
+                self._results['cjv'] = 0.0
                 return runtime
             else:
                 raise RuntimeError(
@@ -131,7 +146,8 @@ class StructuralQC(SimpleInterface):
 
         if np.sum(segdata > 0) < 1e3:
             raise RuntimeError(
-                'Input segmentation data is likely corrupt. MRIQC failed to process this dataset.'
+                'Input segmentation data is likely corrupt. '
+                'MRIQC failed to process this dataset.'
             )
 
         # Load air, artifacts and head masks
@@ -211,6 +227,7 @@ class StructuralQC(SimpleInterface):
 
         # CJV
         self._results['cjv'] = cjv(
+            # mu_wm, mu_gm, sigma_wm, sigma_gm
             stats['wm']['median'],
             stats['gm']['median'],
             stats['wm']['mad'],
