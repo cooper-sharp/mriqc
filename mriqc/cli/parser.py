@@ -105,7 +105,7 @@ def _build_parser():
         description=f"""\
 MRIQC {config.environment.version}
 Automated Quality Control and visual reports for Quality Assessment of structural \
-(T1w, T2w) and functional MRI of the brain.
+(T1w, T2w, FLAIR) and functional MRI of the brain.
 
 {config.DSA_MESSAGE}""",
         formatter_class=ArgumentDefaultsHelpFormatter,
@@ -618,15 +618,31 @@ def parse_args(args=None, namespace=None):
 
     # List of files to be run
     lc_modalities = [mod.lower() for mod in config.execution.modalities]
+    lc_modalities_standard = [mod for mod in lc_modalities if mod != 'flair']
+    lc_modalities_flair = [mod for mod in lc_modalities if mod == 'flair']
+
     bids_dataset, _ = collect_data(
         config.execution.layout,
         config.execution.participant_label,
         session_id=config.execution.session_id,
         task=config.execution.task_id,
         group_echos=True,
-        bids_filters={mod: config.execution.bids_filters.get(mod, {}) for mod in lc_modalities},
-        queries={mod: DEFAULT_BIDS_QUERIES[mod] for mod in lc_modalities},
+        bids_filters={mod: config.execution.bids_filters.get(mod, {}) for mod in lc_modalities_standard},
+        queries={mod: DEFAULT_BIDS_QUERIES[mod] for mod in lc_modalities_standard},
     )
+
+    if lc_modalities_flair:
+        flair_filters = config.execution.bids_filters.get('flair', {})
+        flair_files = config.execution.layout.get(
+            suffix='FLAIR',
+            extension=['.nii', '.nii.gz'],
+            subject=list(config.execution.participant_label),
+            **({'session': config.execution.session_id} if config.execution.session_id else {}),
+            **flair_filters,
+            return_type='file',
+        )
+        if flair_files:
+            bids_dataset['flair'] = flair_files
 
     # Drop empty queries
     bids_dataset = {mod: files for mod, files in bids_dataset.items() if files}
@@ -660,12 +676,7 @@ Please, check out your currently set filters {ffile}:
     # set specifics for alternative populations
     if opts.species.lower() != 'human':
         config.workflow.species = opts.species
-        # TODO: add other species once rats are working
         if opts.species.lower() == 'rat':
             config.workflow.template_id = 'Fischer344'
-            # mean distance from the lateral edge to the center of the brain is
-            # ~ PA:10 mm, LR:7.5 mm, and IS:5 mm (see DOI: 10.1089/089771503770802853)
-            # roll movement is most likely to occur, so set to 7.5 mm
             config.workflow.fd_radius = 7.5
-            # block uploads for the moment; can be reversed before wider release
             config.execution.no_sub = True
