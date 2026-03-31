@@ -540,6 +540,8 @@ def parse_args(args=None, namespace=None):
         ),
     )
     config.from_dict(vars(opts))
+    print(f"DEBUG opts.modalities: {opts.modalities}", flush=True)
+    print(f"DEBUG config.execution.modalities: {config.execution.modalities}", flush=True)
 
     # Load base plugin_settings from file if --use-plugin
     if opts.use_plugin is not None:
