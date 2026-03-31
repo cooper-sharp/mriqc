@@ -65,6 +65,7 @@ from mriqc.interfaces import (
     ComputeQI2,
     ConformImage,
     IQMFileSink,
+    RescaleIntensity,
     RotationMask,
     StructuralQC,
 )
@@ -90,6 +91,11 @@ def anat_qc_workflow(name='anatMRIQC'):
     """
     from mriqc.workflows.shared import synthstrip_wf
 
+    # Enable if necessary
+    # mem_gb = max(
+    #     config.workflow.biggest_file_gb['t1w'],
+    #     config.workflow.biggest_file_gb['t2w'],
+    # )
     dataset = list(
         chain(
             config.workflow.inputs.get('t1w', []),
@@ -139,6 +145,9 @@ def anat_qc_workflow(name='anatMRIQC'):
 
     # 1. Reorient anatomical image
     to_ras = pe.Node(ConformImage(check_dtype=False), name='conform')
+    # 1b. Rescale intensity (ensures N4 convergence for FLAIR;
+    #     harmless linear rescale for T1w/T2w)
+    rescale = pe.Node(RescaleIntensity(), name='rescale')
     # 2. species specific skull-stripping
     if config.workflow.species.lower() == 'human':
         skull_stripping = synthstrip_wf(omp_nthreads=config.nipype.omp_nthreads)
@@ -172,7 +181,8 @@ def anat_qc_workflow(name='anatMRIQC'):
                              ('metadata', 'inputnode.metadata'),
                              ('entities', 'inputnode.entities')]),
         (inputnode, norm, [(('in_file', _get_mod_for_norm), 'inputnode.modality')]),
-        (to_ras, skull_stripping, [('out_file', 'inputnode.in_files')]),
+        (to_ras, rescale, [('out_file', 'in_file')]),
+        (rescale, skull_stripping, [('out_file', 'inputnode.in_files')]),
         (skull_stripping, hmsk, [
             ('outputnode.out_corrected', 'inputnode.in_file'),
             ('outputnode.out_mask', 'inputnode.brainmask'),
@@ -505,8 +515,8 @@ def compute_iqms(name='ComputeIQMs'):
         (inputnode, getqi2, [('in_ras', 'in_file'),
                              ('hatmask', 'air_msk')]),
         (inputnode, homog, [('inu_corrected', 'in_file'),
-                            ('brainmask', 'brain_mask'),
-                            (('pvms', _getwm), 'wm_mask')]),
+                            (('pvms', _getwm), 'wm_mask'),
+                            ('brainmask', 'brain_mask')]),
         (inputnode, measures, [('in_inu', 'in_bias'),
                                ('in_ras', 'in_file'),
                                ('airmask', 'air_msk'),
@@ -826,7 +836,14 @@ def _get_mod(in_file):
 
 
 def _get_mod_for_norm(in_file):
+    """Return the modality string for spatial normalization.
+
+    FLAIR is remapped to T2w because TemplateFlow has no FLAIR template.
+    This function is self-contained (no external calls) because Nipype
+    serializes functions passed to workflow connections.
+    """
     from pathlib import Path
+
     in_file = Path(in_file)
     extension = ''.join(in_file.suffixes)
     mod = in_file.name.replace(extension, '').split('_')[-1]
