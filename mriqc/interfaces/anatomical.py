@@ -37,7 +37,6 @@ from nipype.interfaces.base import (
 )
 from nipype.utils.filemanip import fname_presuffix
 
-from mriqc import config
 from mriqc.qc.anatomical import (
     art_qi1,
     art_qi2,
@@ -107,6 +106,8 @@ class StructuralQC(SimpleInterface):
     output_spec = StructuralQCOutputSpec
 
     def _run_interface(self, runtime):  # pylint: disable=R0914,E1101
+        import os
+
         imnii = nb.load(self.inputs.in_noinu)
 
         # Load image corrected for INU
@@ -114,10 +115,15 @@ class StructuralQC(SimpleInterface):
         inudata[inudata < 0] = 0
 
         if np.all(inudata < 1e-5):
-            config.loggers.workflow.warning(
-                'Input inhomogeneity-corrected data seem empty — '
-                'this may be expected for FLAIR images.'
-            )
+            if os.getenv('MRIQC_ALLOW_EMPTY_N4', '0') == '1':
+                print('WARNING: N4 produced empty output — continuing (FLAIR workaround)')
+                self._results['out_file'] = self.inputs.in_noinu
+                return runtime
+            else:
+                raise RuntimeError(
+                    'Input inhomogeneity-corrected data seem empty. '
+                    'MRIQC failed to process this dataset.'
+                )
 
         # Load binary segmentation from FSL FAST
         segnii = nb.load(self.inputs.in_segm)
@@ -159,32 +165,27 @@ class StructuralQC(SimpleInterface):
         snrvals = []
         self._results['snr'] = {}
         for tlabel in ('csf', 'wm', 'gm'):
-            n = stats[tlabel]['n']
-            if n < 2:
-                self._results['snr'][tlabel] = float('nan')
-                continue
             snrvals.append(
                 snr(
                     stats[tlabel]['median'],
                     stats[tlabel]['stdv'],
-                    n,
+                    stats[tlabel]['n'],
                 )
             )
             self._results['snr'][tlabel] = snrvals[-1]
-        self._results['snr']['total'] = float(np.nanmean(snrvals)) if snrvals else float('nan')
+        self._results['snr']['total'] = float(np.mean(snrvals))
 
+        snrvals = []
         self._results['snrd'] = {
             tlabel: snr_dietrich(
                 stats[tlabel]['median'],
                 mad_air=stats['bg']['mad'],
                 sigma_air=stats['bg']['stdv'],
             )
-            if stats[tlabel]['n'] >= 2
-            else float('nan')
             for tlabel in ['csf', 'wm', 'gm']
         }
         self._results['snrd']['total'] = float(
-            np.nanmean([val for _, val in list(self._results['snrd'].items())])
+            np.mean([val for _, val in list(self._results['snrd'].items())])
         )
 
         # CNR
