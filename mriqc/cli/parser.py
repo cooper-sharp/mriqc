@@ -632,6 +632,9 @@ def parse_args(args=None, namespace=None):
         bids_filters={mod: config.execution.bids_filters.get(mod, {}) for mod in lc_modalities_standard},
         queries={mod: DEFAULT_BIDS_QUERIES[mod] for mod in lc_modalities_standard},
     )
+    print(f"DEBUG bids_dataset keys after collect_data: {list(bids_dataset.keys())}", flush=True)
+    print(f"DEBUG lc_modalities_standard: {lc_modalities_standard}", flush=True)
+    print(f"DEBUG lc_modalities_flair: {lc_modalities_flair}", flush=True)
 
     if lc_modalities_flair:
         flair_filters = config.execution.bids_filters.get('flair', {})
