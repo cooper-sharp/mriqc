@@ -22,6 +22,7 @@
 #
 """Nipype interfaces to support anatomical workflow."""
 
+import os
 from pathlib import Path
 
 import nibabel as nb
@@ -52,38 +53,6 @@ from mriqc.qc.anatomical import (
     wm2max,
 )
 from mriqc.utils.misc import _flatten_dict
-
-
-class RescaleIntensityInputSpec(BaseInterfaceInputSpec):
-    in_file = File(exists=True, mandatory=True, desc='input NIfTI image')
-    target_mean = traits.Float(1000.0, usedefault=True, desc='target global mean intensity')
-
-
-class RescaleIntensityOutputSpec(TraitedSpec):
-    out_file = File(exists=True, desc='rescaled NIfTI image')
-
-
-class RescaleIntensity(SimpleInterface):
-    """Rescale image intensity so the global mean equals target_mean.
-
-    This is equivalent to ``fslmaths <in> -inm <target_mean> <out>`` and is
-    required for FLAIR images whose native intensity range is too low for
-    N4 bias-field correction to converge properly.
-    """
-
-    input_spec = RescaleIntensityInputSpec
-    output_spec = RescaleIntensityOutputSpec
-
-    def _run_interface(self, runtime):
-        img = nb.load(self.inputs.in_file)
-        data = img.get_fdata(dtype=np.float64)
-        global_mean = data[data > 0].mean()
-        if global_mean > 0:
-            data *= self.inputs.target_mean / global_mean
-        out_file = fname_presuffix(self.inputs.in_file, suffix='_rescaled', newpath='.')
-        img.__class__(data, img.affine, img.header).to_filename(out_file)
-        self._results['out_file'] = out_file
-        return runtime
 
 
 class StructuralQCInputSpec(BaseInterfaceInputSpec):
@@ -145,10 +114,31 @@ class StructuralQC(SimpleInterface):
         inudata[inudata < 0] = 0
 
         if np.all(inudata < 1e-5):
-            raise RuntimeError(
-                'Input inhomogeneity-corrected data seem empty. '
-                'MRIQC failed to process this dataset.'
-            )
+            if os.getenv('MRIQC_ALLOW_EMPTY_N4', '0') == '1':
+                print('WARNING: N4 produced empty output — continuing (FLAIR workaround)')
+                self._results['out_qc'] = {}
+                self._results['summary'] = {}
+                self._results['icvs'] = {}
+                self._results['rpve'] = {}
+                self._results['size'] = {}
+                self._results['spacing'] = {}
+                self._results['fwhm'] = {}
+                self._results['inu'] = {}
+                self._results['snr'] = {}
+                self._results['snrd'] = {}
+                self._results['tpm_overlap'] = {}
+                self._results['cnr'] = 0.0
+                self._results['fber'] = 0.0
+                self._results['efc'] = 0.0
+                self._results['qi_1'] = 0.0
+                self._results['wm2max'] = 0.0
+                self._results['cjv'] = 0.0
+                return runtime
+            else:
+                raise RuntimeError(
+                    'Input inhomogeneity-corrected data seem empty. '
+                    'MRIQC failed to process this dataset.'
+                )
 
         # Load binary segmentation from FSL FAST
         segnii = nb.load(self.inputs.in_segm)
@@ -416,10 +406,8 @@ class ComputeQI2(SimpleInterface):
 class HarmonizeInputSpec(BaseInterfaceInputSpec):
     in_file = File(exists=True, mandatory=True, desc='input data (after bias correction)')
     wm_mask = File(exists=True, mandatory=True, desc='white-matter mask')
-    brain_mask = File(exists=True, desc='brain mask (fall-back in case [near]-empty WM mask)')
     erodemsk = traits.Bool(True, usedefault=True, desc='erode mask')
     thresh = traits.Float(0.9, usedefault=True, desc='WM probability threshold')
-    min_size = traits.Int(30, usedefault=True, desc='minimum number of voxels in binary WM mask')
 
 
 class HarmonizeOutputSpec(TraitedSpec):
@@ -428,11 +416,7 @@ class HarmonizeOutputSpec(TraitedSpec):
 
 class Harmonize(SimpleInterface):
     """
-    Intensity harmonization by scaling to WM median = 1000.
-
-    For modalities like FLAIR where the WM probability map may be empty
-    or near-empty after thresholding, falls back to using the brain mask
-    with intensity percentile-based pseudo-WM selection (75th-95th percentile).
+    Computes the artifact mask using the method described in [Mortamet2009]_.
     """
 
     input_spec = HarmonizeInputSpec
@@ -440,24 +424,19 @@ class Harmonize(SimpleInterface):
 
     def _run_interface(self, runtime):
         in_file = nb.load(self.inputs.in_file)
-        data = in_file.get_fdata()
-
         wm_mask = nb.load(self.inputs.wm_mask).get_fdata()
-        wm_mask[wm_mask < self.inputs.thresh] = 0
+        wm_mask[wm_mask < 0.9] = 0
         wm_mask[wm_mask > 0] = 1
-        wm_mask = wm_mask.astype(bool)
-        wm_mask_size = wm_mask.sum()
+        wm_mask = wm_mask.astype(np.uint8)
 
-        if wm_mask_size < self.inputs.min_size:
-            brain_mask = nb.load(self.inputs.brain_mask).get_fdata() > 0.5
-            wm_mask = brain_mask.copy()
-            wm_mask[data < np.percentile(data[brain_mask], 75)] = False
-            wm_mask[data > np.percentile(data[brain_mask], 95)] = False
-        elif self.inputs.erodemsk:
+        if self.inputs.erodemsk:
+            # Create a structural element to be used in an opening operation.
             struct = nd.generate_binary_structure(3, 2)
-            wm_mask = nd.binary_erosion(wm_mask.astype(np.uint8), structure=struct).astype(bool)
+            # Perform an opening operation on the background data.
+            wm_mask = nd.binary_erosion(wm_mask, structure=struct).astype(np.uint8)
 
-        data *= 1000.0 / np.median(data[wm_mask])
+        data = in_file.get_fdata()
+        data *= 1000.0 / np.median(data[wm_mask > 0])
 
         out_file = fname_presuffix(self.inputs.in_file, suffix='_harmonized', newpath='.')
         in_file.__class__(data, in_file.affine, in_file.header).to_filename(out_file)

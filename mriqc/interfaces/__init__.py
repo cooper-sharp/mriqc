@@ -28,7 +28,6 @@ from mriqc.interfaces.anatomical import (
     ArtifactMask,
     ComputeQI2,
     Harmonize,
-    RescaleIntensity,
     RotationMask,
     StructuralQC,
 )
@@ -52,7 +51,6 @@ __all__ = [
     'GatherTimeseries',
     'Harmonize',
     'IQMFileSink',
-    'RescaleIntensity',
     'RotationMask',
     'Spikes',
     'StructuralQC',
