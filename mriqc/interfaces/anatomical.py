@@ -159,27 +159,32 @@ class StructuralQC(SimpleInterface):
         snrvals = []
         self._results['snr'] = {}
         for tlabel in ('csf', 'wm', 'gm'):
+            n = stats[tlabel]['n']
+            if n < 2:
+                self._results['snr'][tlabel] = float('nan')
+                continue
             snrvals.append(
                 snr(
                     stats[tlabel]['median'],
                     stats[tlabel]['stdv'],
-                    stats[tlabel]['n'],
+                    n,
                 )
             )
             self._results['snr'][tlabel] = snrvals[-1]
-        self._results['snr']['total'] = float(np.mean(snrvals))
+        self._results['snr']['total'] = float(np.nanmean(snrvals)) if snrvals else float('nan')
 
-        snrvals = []
         self._results['snrd'] = {
             tlabel: snr_dietrich(
                 stats[tlabel]['median'],
                 mad_air=stats['bg']['mad'],
                 sigma_air=stats['bg']['stdv'],
             )
+            if stats[tlabel]['n'] >= 2
+            else float('nan')
             for tlabel in ['csf', 'wm', 'gm']
         }
         self._results['snrd']['total'] = float(
-            np.mean([val for _, val in list(self._results['snrd'].items())])
+            np.nanmean([val for _, val in list(self._results['snrd'].items())])
         )
 
         # CNR
